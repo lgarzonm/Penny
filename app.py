@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import ai_coach
 import database
 import insights
 import sample_data
@@ -342,8 +343,54 @@ def render_tradeoff() -> None:
             st.write(f"- {o['note']} (≈ SGD {o['weekly_amount'] * o['weeks']:,.2f} total)")
 
 
+SAMPLE_QUESTIONS = [
+    "Can I afford a SGD 120 concert ticket?",
+    "Where did I overspend this month?",
+    "How can I reach my savings goal faster?",
+    "Which subscriptions should I cancel?",
+]
+
+
 def render_ask_penny() -> None:
-    _placeholder("Ask Penny", "Phase 8")
+    st.subheader("Ask Penny")
+    user_id = _require_user()
+    if not user_id:
+        return
+
+    provider = ai_coach.get_active_provider()
+    st.caption(f"{ai_coach.DISCLAIMER}")
+    st.caption(
+        f"AI provider: **{provider}**"
+        + ("  (set a key in `.env` for live responses)" if provider == "mock" else "")
+    )
+
+    profile = st.session_state.get("profile") or {}
+    coaching_style = profile.get("coaching_style", "Penny")
+    transactions = database.get_transactions(user_id)
+    goal = database.get_goal(user_id)
+    summary = insights.build_ai_summary(profile, transactions, goal)
+
+    history = st.session_state.setdefault("chat_history", [])
+
+    if not history:
+        st.markdown("**Try asking:**")
+        for q in SAMPLE_QUESTIONS:
+            st.write(f"- {q}")
+
+    for msg in history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    prompt = st.chat_input("Ask Penny about your budget…")
+    if prompt:
+        history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant"):
+            with st.spinner("Penny is thinking…"):
+                answer = ai_coach.ask_penny(prompt, summary, coaching_style, history[:-1])
+            st.markdown(answer)
+        history.append({"role": "assistant", "content": answer})
 
 
 PAGE_RENDERERS = {
