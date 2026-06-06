@@ -354,10 +354,14 @@ def render_ask_penny() -> None:
 
     provider = ai_coach.get_active_provider()
     st.caption(f"{ai_coach.DISCLAIMER}")
-    st.caption(
-        f"AI provider: **{provider}**"
-        + ("  (set a key in `.env` for live responses)" if provider == "mock" else "")
-    )
+    if provider == "mock":
+        st.success(
+            "Mock mode — no API usage. Responses are generated locally for free. "
+            "Set a key in `.env` for live AI responses.",
+            icon="🟢",
+        )
+    else:
+        st.info(f"Live AI mode — using **{provider}** (this consumes API credits).", icon="🔵")
 
     profile = st.session_state.get("profile") or {}
     current_style = profile.get("coaching_style", "Penny")
