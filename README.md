@@ -11,11 +11,10 @@ chat with a friendly coach for everyday money decisions.
 
 ## Features (MVP)
 
-- **Demo Profile** — quick setup, no real login required
-- **Spending Dashboard** — totals, spend by category/month, top merchants, recurring subscriptions, insights
-- **Savings Goal** — progress tracking, monthly savings required, on-track status
-- **Trade-Off Simulator** — see how a purchase delays your goal and how to offset it
-- **Ask Penny** — chat coach with four tone presets (Penny, Mark, Van, Fred)
+- **Profile** — quick setup, no real login required
+- **Spending Dashboard** — YTD totals, spend by category/month, most-visited merchants, recurring subscriptions, lively insights
+- **Goals** — progress tracking, monthly savings required, on-track status, tailored tips, and a **wishlist** of future purchases scored against your goal
+- **Coach** — one chat that answers budgeting questions *and* runs purchase trade-offs, with four tone presets (Penny, Mark, Van, Fred)
 
 Penny uses **preloaded Singapore sample data**, **rule-based categorization**
 (no AI), and sends only **compact summaries** to the AI model. It runs in
@@ -24,13 +23,13 @@ Penny uses **preloaded Singapore sample data**, **rule-based categorization**
 ## Project structure
 
 ```
-app.py           Streamlit entry point + navigation skeleton
-database.py      SQLite persistence (users, transactions, goals, summaries)
-sample_data.py   Preloaded Singapore sample transactions   (Phase 3)
-categorizer.py   Rule-based categorization                 (Phase 4)
-insights.py      Dashboard metrics + AI context summary     (Phase 5)
-tradeoff.py      Trade-off simulator                        (Phase 7)
-ai_coach.py      Ask Penny providers (Anthropic/OpenAI/Mock) (Phases 8-9)
+app.py           Streamlit entry point — Profile, Dashboard, Goals, Coach
+database.py      SQLite persistence (users, transactions, goals, summaries, wishlist)
+sample_data.py   Preloaded Singapore sample transactions (YTD, with fluctuation)
+categorizer.py   Rule-based categorization
+insights.py      Dashboard metrics, goal progress, tips, AI context summary
+tradeoff.py      Purchase trade-off calculations
+ai_coach.py      Coach providers (Anthropic/OpenAI/Mock) + personalities
 requirements.txt
 docs/            Extracted technical brief & implementation plan
 ```
@@ -71,14 +70,14 @@ A ~3-minute walkthrough:
 3. **Dashboard (45s)** — Show totals and the ~19% savings rate. Point out the
    category donut (Food & Drinks leads), monthly trend, top merchants, recurring
    subscriptions (Netflix/Spotify/Disney+), and the plain-English insights.
-4. **Goals (30s)** — Show progress toward the Japan trip, monthly amount needed
-   vs. current pace, and the on-track badge.
-5. **Trade-Off Simulator (30s)** — Try an SGD 80 purchase; show the estimated
-   goal delay and the suggested offset ("trim Food & Drinks by SGD 20/week").
-6. **Ask Penny (45s)** — Ask "Where did I overspend?" and "How can I reach my
-   goal faster?". Switch coaching style (e.g. to *Mark*) to show the tone change.
-   Ask "Should I invest in Bitcoin?" to demonstrate the safety guardrail.
-7. **Wrap (15s)** — Note it runs offline in mock mode, sends only summaries to
+4. **Goals (45s)** — Show progress toward the Japan trip, monthly amount needed
+   vs. current pace, the on-track badge, and the tailored tips. Add an item to
+   the **wishlist** and show the estimated goal delay; click *Plan with Penny*.
+5. **Coach (60s)** — The wishlist item arrives as a chat trade-off. Then ask
+   "Where did I overspend?" and "How can I reach my goal faster?". Switch
+   coaching style (e.g. to *Mark*) to show the tone change. Ask "Should I invest
+   in Bitcoin?" to demonstrate the safety guardrail.
+6. **Wrap (15s)** — Note it runs offline in mock mode, sends only summaries to
    the AI, and that PDF bank-statement upload is a planned enhancement.
 
 Tip: use the **🔄 New demo session** button in the sidebar to reset between runs.

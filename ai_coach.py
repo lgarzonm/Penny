@@ -171,6 +171,41 @@ def _history_messages(history: list[dict] | None) -> list[dict]:
 # --------------------------------------------------------------------------- #
 # Mock provider (no API key required)
 # --------------------------------------------------------------------------- #
+def format_purchase_advice(
+    purchase_name: str,
+    tradeoff_result: dict,
+    goal_name: str,
+    coaching_style: str = "Penny",
+) -> str:
+    """Conversational trade-off reply for the Coach chat (uses tradeoff output)."""
+    voice = STYLE_VOICE.get(coaching_style, STYLE_VOICE["Penny"])
+    amount = tradeoff_result.get("purchase_amount", 0)
+    delay = tradeoff_result.get("delay_weeks")
+    offsets = tradeoff_result.get("offsets") or []
+
+    if amount <= 0:
+        return f"{voice['prefix']}Tell me the price and I'll run the numbers! 🧮\n\n{DISCLAIMER}"
+
+    if delay is None:
+        body = (
+            f"Heads up on {purchase_name} 🛍️: at SGD {amount:,.0f} this would set "
+            f"back {goal_name} since you're not saving much right now. Let's find room first."
+        )
+    else:
+        body = (
+            f"Okay, real talk on {purchase_name} 🛍️: SGD {amount:,.0f} would push "
+            f"{goal_name} back about {delay:.1f} weeks. 📅"
+        )
+        if offsets:
+            lines = "\n".join(
+                f"• {o['note']} (~SGD {o['weekly_amount'] * o['weeks']:,.0f} total)"
+                for o in offsets
+            )
+            body += f"\n\nWays to stay on track 👇\n{lines}"
+
+    return f"{voice['prefix']}{body}\n\n{voice['closer'].strip()}\n\n{DISCLAIMER}"
+
+
 def _mock_response(question: str, summary: dict, coaching_style: str) -> str:
     q = question.lower()
     fin = (summary or {}).get("financials", {}) or {}
