@@ -52,14 +52,17 @@ AGE_GROUPS = ["Under 18", "18-24", "25-34", "35-44", "45+"]
 
 def render_profile() -> None:
     st.subheader("Demo Profile")
-    st.caption("No real login required — this just sets up your demo session.")
+    st.caption(
+        "No real login required — this just sets up your demo session. "
+        "Fill in the fields, then **scroll down and click _Save profile & load demo data_**."
+    )
 
     existing = st.session_state.get("profile") or {}
 
     with st.form("profile_form"):
         col1, col2 = st.columns(2)
         with col1:
-            name = st.text_input("Name", value=existing.get("name", ""))
+            name = st.text_input("Name", value=existing.get("name", "Alex"))
             age_group = st.selectbox(
                 "Age group",
                 AGE_GROUPS,
@@ -93,7 +96,9 @@ def render_profile() -> None:
             )
             target_date = st.date_input("Target date", value=date.today())
 
-        submitted = st.form_submit_button("Save profile & load demo data")
+        submitted = st.form_submit_button(
+            "Save profile & load demo data", type="primary", use_container_width=True
+        )
 
     if submitted:
         if not name.strip():
@@ -235,7 +240,7 @@ def render_goals() -> None:
             )
             deadline_default = date.fromisoformat(goal["deadline"]) if goal.get("deadline") else date.today()
             deadline = st.date_input("Deadline", value=deadline_default)
-        saved = st.form_submit_button("Save goal")
+        saved = st.form_submit_button("Save goal", type="primary", use_container_width=True)
 
     if saved:
         database.upsert_goal(
@@ -306,7 +311,7 @@ def render_tradeoff() -> None:
         with col3:
             spend_categories = [c for c in CATEGORIES if c not in ("Income", "Transfers")]
             st.selectbox("Category", spend_categories, index=spend_categories.index("Shopping"))
-        simulate = st.form_submit_button("Simulate")
+        simulate = st.form_submit_button("Simulate", type="primary", use_container_width=True)
 
     if not simulate:
         return
