@@ -81,9 +81,20 @@ def init_db() -> None:
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             );
 
+            CREATE TABLE IF NOT EXISTS wishlist (
+                wish_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                item_name  TEXT NOT NULL,
+                amount     REAL NOT NULL,
+                category   TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions (user_id);
             CREATE INDEX IF NOT EXISTS idx_goal_user ON goals (user_id);
             CREATE INDEX IF NOT EXISTS idx_summary_user ON monthly_summaries (user_id);
+            CREATE INDEX IF NOT EXISTS idx_wish_user ON wishlist (user_id);
             """
         )
 
@@ -284,6 +295,32 @@ def get_monthly_summaries(user_id: int) -> list[dict]:
             (user_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Wishlist
+# --------------------------------------------------------------------------- #
+def add_wish(user_id: int, item_name: str, amount: float, category: str = "Other") -> int:
+    with get_connection() as conn:
+        cur = conn.execute(
+            """INSERT INTO wishlist (user_id, item_name, amount, category, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (user_id, item_name, amount, category, _now()),
+        )
+        return int(cur.lastrowid)
+
+
+def get_wishlist(user_id: int) -> list[dict]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM wishlist WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_wish(wish_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM wishlist WHERE wish_id = ?", (wish_id,))
 
 
 if __name__ == "__main__":

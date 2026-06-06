@@ -1,11 +1,7 @@
 """Penny — AI financial decision coach for young adults in Singapore.
 
-Streamlit entry point. This file wires up the navigation skeleton and shared
-session state. Page logic is filled in across the build phases:
-
-    Phase 1 (done): UI skeleton, sidebar nav, disclaimer, session state
-    Phase 2 (done): SQLite database initialization
-    Phase 3+:       sample data, dashboard, goals, trade-off, Ask Penny
+Streamlit entry point. Pages: Profile, Dashboard, Goals, and Coach (a merged
+chat that answers budgeting questions and runs purchase trade-offs).
 
 Run with:  streamlit run app.py
 """
@@ -37,7 +33,9 @@ COACHING_STYLES = {
     "Fred": "wise and reflective",
 }
 
-PAGES = ["Profile", "Dashboard", "Goals", "Trade-Off Simulator", "Ask Penny"]
+PAGES = ["Profile", "Dashboard", "Goals", "Coach"]
+AGE_GROUPS = ["Under 18", "18-24", "25-34", "35-44", "45+"]
+SPEND_CATEGORIES = [c for c in CATEGORIES if c not in ("Income", "Transfers")]
 
 
 def init_session_state() -> None:
@@ -45,24 +43,59 @@ def init_session_state() -> None:
     st.session_state.setdefault("user_id", None)
     st.session_state.setdefault("profile", {})
     st.session_state.setdefault("chat_history", [])
+    st.session_state.setdefault("nav", "Profile")
+    st.session_state.setdefault("pending_purchase", None)
 
 
-AGE_GROUPS = ["Under 18", "18-24", "25-34", "35-44", "45+"]
+# --------------------------------------------------------------------------- #
+# Navigation callbacks (safe to mutate widget state inside on_click)
+# --------------------------------------------------------------------------- #
+def _goto(page: str) -> None:
+    st.session_state["nav"] = page
 
 
+def _goto_purchase(item: dict) -> None:
+    st.session_state["pending_purchase"] = item
+    st.session_state["nav"] = "Coach"
+
+
+def _reset_session() -> None:
+    st.session_state["user_id"] = None
+    st.session_state["profile"] = {}
+    st.session_state["chat_history"] = []
+    st.session_state["pending_purchase"] = None
+    st.session_state["nav"] = "Profile"
+
+
+def _require_user() -> int | None:
+    user_id = st.session_state.get("user_id")
+    if not user_id:
+        st.info("👈 Create a demo profile first (Profile page) to load your data.")
+        return None
+    return user_id
+
+
+# --------------------------------------------------------------------------- #
+# Profile
+# --------------------------------------------------------------------------- #
 def render_profile() -> None:
-    st.subheader("Demo Profile")
-    st.caption(
-        "No real login required — this just sets up your demo session. "
-        "Fill in the fields, then **scroll down and click _Save profile & load demo data_**."
-    )
+    st.subheader("Your Profile")
 
+    with st.expander("👋 New here? How Penny works", expanded=False):
+        st.markdown(
+            "1. **Profile** — set up your details and goal.\n"
+            "2. **Dashboard** — see where your money goes.\n"
+            "3. **Goals** — track progress and save future wishes.\n"
+            "4. **Coach** — chat with Penny and test purchases before you buy."
+        )
+
+    st.caption("Tell Penny a little about yourself, then scroll down to save.")
     existing = st.session_state.get("profile") or {}
 
     with st.form("profile_form"):
         col1, col2 = st.columns(2)
         with col1:
-            name = st.text_input("Name", value=existing.get("name", "Alex"))
+            name = st.text_input("Name", value=existing.get("name", ""))
             age_group = st.selectbox(
                 "Age group",
                 AGE_GROUPS,
@@ -72,8 +105,7 @@ def render_profile() -> None:
             )
             monthly_income = st.number_input(
                 "Monthly income / allowance (SGD)",
-                min_value=0.0,
-                step=100.0,
+                min_value=0.0, step=100.0,
                 value=float(existing.get("monthly_income", 2500.0)),
             )
             coaching_style = st.selectbox(
@@ -97,7 +129,7 @@ def render_profile() -> None:
             target_date = st.date_input("Target date", value=date.today())
 
         submitted = st.form_submit_button(
-            "Save profile & load demo data", type="primary", use_container_width=True
+            "Save profile", type="primary", use_container_width=True
         )
 
     if submitted:
@@ -106,10 +138,8 @@ def render_profile() -> None:
             return
 
         user_id = database.create_user(
-            name=name.strip(),
-            age_group=age_group,
-            monthly_income=monthly_income,
-            coaching_style=coaching_style,
+            name=name.strip(), age_group=age_group,
+            monthly_income=monthly_income, coaching_style=coaching_style,
         )
         database.upsert_goal(
             user_id,
@@ -118,45 +148,39 @@ def render_profile() -> None:
             current_amount=current_amount,
             deadline=target_date.isoformat(),
         )
-        added = sample_data.load_sample_data(user_id, monthly_income)
+        sample_data.load_sample_data(user_id, monthly_income)
 
         st.session_state["user_id"] = user_id
         st.session_state["profile"] = {
-            "name": name.strip(),
-            "age_group": age_group,
-            "monthly_income": monthly_income,
-            "coaching_style": coaching_style,
-            "goal_name": goal_name.strip(),
-            "target_amount": target_amount,
+            "name": name.strip(), "age_group": age_group,
+            "monthly_income": monthly_income, "coaching_style": coaching_style,
+            "goal_name": goal_name.strip(), "target_amount": target_amount,
             "current_amount": current_amount,
         }
-        st.success(
-            f"Profile saved for {name.strip()}. Loaded {added} sample transactions. "
-            "Head to the Dashboard next."
+
+    if st.session_state.get("user_id"):
+        st.markdown("**You're all set!** Your financial overview is ready. 🎉")
+        st.button(
+            "Head to the Dashboard →", type="primary",
+            on_click=_goto, args=("Dashboard",),
         )
 
 
-def _require_user() -> int | None:
-    user_id = st.session_state.get("user_id")
-    if not user_id:
-        st.info("👈 Create a demo profile first (Profile page) to load your data.")
-        return None
-    return user_id
-
-
+# --------------------------------------------------------------------------- #
+# Dashboard
+# --------------------------------------------------------------------------- #
 def render_dashboard() -> None:
     st.subheader("Spending Dashboard")
     user_id = _require_user()
     if not user_id:
         return
 
-    transactions = database.get_transactions(user_id)
-    ins = insights.compute_insights(transactions)
+    ins = insights.compute_insights(database.get_transactions(user_id))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total income", f"SGD {ins['total_income']:,.2f}")
-    c2.metric("Total expenses", f"SGD {ins['total_expenses']:,.2f}")
-    c3.metric("Net savings", f"SGD {ins['net_savings']:,.2f}")
+    c1.metric("Total income", f"SGD {ins['total_income']:,.0f}")
+    c2.metric("Total expenses", f"SGD {ins['total_expenses']:,.0f}")
+    c3.metric("Net savings", f"SGD {ins['net_savings']:,.0f}")
     c4.metric("Savings rate", f"{ins['savings_rate']:.0f}%")
 
     st.divider()
@@ -173,7 +197,7 @@ def render_dashboard() -> None:
             st.caption("No expense data.")
 
     with right:
-        st.markdown("**Income vs. expenses by month**")
+        st.markdown("**Income vs. expenses by month (2026 YTD)**")
         if ins["by_month"]:
             month_df = pd.DataFrame(ins["by_month"])
             melted = month_df.melt(
@@ -186,11 +210,15 @@ def render_dashboard() -> None:
         else:
             st.caption("No monthly data.")
 
-    st.markdown("**Top merchants**")
-    if ins["top_merchants"]:
-        merch_df = pd.DataFrame(ins["top_merchants"]).sort_values("amount")
-        fig = px.bar(merch_df, x="amount", y="merchant", orientation="h")
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280)
+    st.markdown("**🏪 Most visited merchants**")
+    if ins["frequent_merchants"]:
+        fm = pd.DataFrame(ins["frequent_merchants"]).sort_values("count")
+        fig = px.bar(
+            fm, x="count", y="merchant", orientation="h",
+            labels={"count": "visits", "merchant": ""},
+            hover_data={"amount": ":.0f"},
+        )
+        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
         st.plotly_chart(fig, use_container_width=True)
 
     col_a, col_b = st.columns(2)
@@ -212,11 +240,14 @@ def render_dashboard() -> None:
             st.caption("No recurring subscriptions detected.")
 
     st.divider()
-    st.markdown("**💡 Insights**")
+    st.markdown("#### 💡 Penny's read on your money")
     for line in ins["text_insights"]:
-        st.write(f"- {line}")
+        st.markdown(f"##### {line}")
 
 
+# --------------------------------------------------------------------------- #
+# Goals
+# --------------------------------------------------------------------------- #
 def render_goals() -> None:
     st.subheader("Savings Goal")
     user_id = _require_user()
@@ -244,20 +275,16 @@ def render_goals() -> None:
 
     if saved:
         database.upsert_goal(
-            user_id,
-            goal_name=goal_name.strip() or "My goal",
-            target_amount=target_amount,
-            current_amount=current_amount,
+            user_id, goal_name=goal_name.strip() or "My goal",
+            target_amount=target_amount, current_amount=current_amount,
             deadline=deadline.isoformat(),
         )
         prof = st.session_state.get("profile") or {}
         prof.update({
-            "goal_name": goal_name.strip(),
-            "target_amount": target_amount,
+            "goal_name": goal_name.strip(), "target_amount": target_amount,
             "current_amount": current_amount,
         })
         st.session_state["profile"] = prof
-        st.success("Goal saved.")
         goal = database.get_goal(user_id) or {}
 
     if not goal:
@@ -271,78 +298,79 @@ def render_goals() -> None:
     st.markdown(f"### {goal.get('goal_name', 'My goal')}")
     st.progress(
         min(prog["progress_pct"] / 100, 1.0),
-        text=f"{prog['progress_pct']:.0f}% — SGD {prog['current_amount']:,.2f} of SGD {prog['target_amount']:,.2f}",
+        text=f"{prog['progress_pct']:.0f}% · SGD {prog['current_amount']:,.0f} of SGD {prog['target_amount']:,.0f}",
     )
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Remaining", f"SGD {prog['remaining']:,.2f}")
-    c2.metric("Monthly needed", f"SGD {prog['monthly_required']:,.2f}")
-    c3.metric("Your pace / mo", f"SGD {prog['current_pace']:,.2f}")
+    c1.metric("Remaining", f"SGD {prog['remaining']:,.0f}")
+    c2.metric("Monthly needed", f"SGD {prog['monthly_required']:,.0f}")
+    c3.metric("Your pace / mo", f"SGD {prog['current_pace']:,.0f}")
 
     if prog["on_track"] is True:
         st.success("✅ You're on track to reach this goal at your current pace.")
     elif prog["on_track"] is False:
-        st.warning("⚠️ At your current pace you may miss this goal — see the trade-off simulator for options.")
+        st.warning("⚠️ At your current pace you may miss this goal. Try the tips below or ask Penny in the Coach tab.")
 
-    if prog["months_left"] is not None:
-        st.caption(f"About {prog['months_left']:.1f} months until your deadline.")
     if prog["projected_date"]:
         st.caption(
             f"At your current pace you'd reach the goal in ~{prog['projected_months']:.1f} "
             f"months (around {prog['projected_date']})."
         )
 
+    # Preliminary advice
+    st.markdown("#### 💡 Ways to reach your goal faster")
+    for tip in insights.generate_goal_tips(ins, prog):
+        st.write(tip)
 
-def render_tradeoff() -> None:
-    st.subheader("Trade-Off Simulator")
-    st.caption("See how a purchase affects your goal — and how you could offset it.")
-    user_id = _require_user()
-    if not user_id:
-        return
+    # Wishlist of future purchases
+    _render_wishlist(user_id, ins, goal)
 
-    with st.form("tradeoff_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            purchase_name = st.text_input("Desired purchase", value="New sneakers")
-        with col2:
-            purchase_amount = st.number_input(
-                "Purchase amount (SGD)", min_value=0.0, step=10.0, value=80.0
-            )
-        with col3:
-            spend_categories = [c for c in CATEGORIES if c not in ("Income", "Transfers")]
-            st.selectbox("Category", spend_categories, index=spend_categories.index("Shopping"))
-        simulate = st.form_submit_button("Simulate", type="primary", use_container_width=True)
 
-    if not simulate:
-        return
-
-    ins = insights.compute_insights(database.get_transactions(user_id))
-    goal = database.get_goal(user_id)
-    prog = insights.compute_goal_progress(goal, ins) if goal else None
-    result = tradeoff.simulate(
-        purchase_amount,
-        ins,
-        goal_progress=prog,
-        goal_name=(goal or {}).get("goal_name", "your goal"),
-        purchase_name=purchase_name.strip() or "this purchase",
-    )
-
+def _render_wishlist(user_id: int, ins: dict, goal: dict) -> None:
     st.divider()
-    c1, c2 = st.columns(2)
-    c1.metric("Purchase", f"SGD {result['purchase_amount']:,.2f}")
-    if result["delay_weeks"] is not None:
-        c2.metric("Estimated goal delay", f"~{result['delay_weeks']:.1f} weeks")
-    else:
-        c2.metric("Estimated goal delay", "N/A")
+    st.markdown("#### 🎁 Wishlist — things you're eyeing")
+    st.caption("Save future purchases here and see how each one would affect this goal.")
 
-    st.info(result["message"])
+    with st.form("wish_form", clear_on_submit=True):
+        wc1, wc2, wc3 = st.columns([2, 1, 1])
+        with wc1:
+            item_name = st.text_input("Item", placeholder="e.g. AirPods Pro")
+        with wc2:
+            amount = st.number_input("Price (SGD)", min_value=0.0, step=10.0, value=100.0)
+        with wc3:
+            category = st.selectbox("Category", SPEND_CATEGORIES, index=SPEND_CATEGORIES.index("Shopping"))
+        add = st.form_submit_button("➕ Add to wishlist", use_container_width=True)
 
-    if result["offsets"]:
-        st.markdown("**Possible offsets**")
-        for o in result["offsets"]:
-            st.write(f"- {o['note']} (≈ SGD {o['weekly_amount'] * o['weeks']:,.2f} total)")
+    if add and item_name.strip():
+        database.add_wish(user_id, item_name.strip(), amount, category)
+
+    wishes = database.get_wishlist(user_id)
+    if not wishes:
+        st.caption("Your wishlist is empty. Add something you're dreaming about! ✨")
+        return
+
+    goal_name = goal.get("goal_name", "your goal")
+    prog = insights.compute_goal_progress(goal, ins)
+    for w in wishes:
+        result = tradeoff.simulate(
+            w["amount"], ins, goal_progress=prog,
+            goal_name=goal_name, purchase_name=w["item_name"],
+        )
+        delay = result["delay_weeks"]
+        delay_txt = f"~{delay:.1f} wk delay" if delay is not None else "impact unclear"
+        r1, r2, r3 = st.columns([3, 1, 1])
+        r1.markdown(f"**{w['item_name']}** · SGD {w['amount']:,.0f}  \n🕒 {delay_txt} to {goal_name}")
+        r2.button(
+            "💬 Plan with Penny", key=f"plan_{w['wish_id']}",
+            on_click=_goto_purchase,
+            args=({"item_name": w["item_name"], "amount": w["amount"], "category": w["category"]},),
+        )
+        r3.button("🗑️ Remove", key=f"del_{w['wish_id']}", on_click=database.delete_wish, args=(w["wish_id"],))
 
 
+# --------------------------------------------------------------------------- #
+# Coach (merged Ask Penny + Trade-Off)
+# --------------------------------------------------------------------------- #
 SAMPLE_QUESTIONS = [
     "Can I afford a SGD 120 concert ticket?",
     "Where did I overspend this month?",
@@ -351,14 +379,28 @@ SAMPLE_QUESTIONS = [
 ]
 
 
-def render_ask_penny() -> None:
-    st.subheader("Ask Penny")
+def _push_purchase_to_chat(user_id, profile, ins, goal, purchase_name, amount, coaching_style):
+    """Compute a trade-off and append it to the chat as a Q&A turn."""
+    goal_name = (goal or {}).get("goal_name", "your goal")
+    prog = insights.compute_goal_progress(goal, ins) if goal else None
+    result = tradeoff.simulate(
+        amount, ins, goal_progress=prog,
+        goal_name=goal_name, purchase_name=purchase_name,
+    )
+    advice = ai_coach.format_purchase_advice(purchase_name, result, goal_name, coaching_style)
+    history = st.session_state["chat_history"]
+    history.append({"role": "user", "content": f"Can I afford {purchase_name} (SGD {amount:,.0f})?"})
+    history.append({"role": "assistant", "content": advice})
+
+
+def render_coach() -> None:
+    st.subheader("Penny — your money coach 🪙")
     user_id = _require_user()
     if not user_id:
         return
 
     provider = ai_coach.get_active_provider()
-    st.caption(f"{ai_coach.DISCLAIMER}")
+    st.caption(ai_coach.DISCLAIMER)
     if provider == "mock":
         st.success(
             "Mock mode — no API usage. Responses are generated locally for free. "
@@ -373,8 +415,7 @@ def render_ask_penny() -> None:
     coaching_style = st.selectbox(
         "Coaching style",
         list(COACHING_STYLES),
-        index=list(COACHING_STYLES).index(current_style)
-        if current_style in COACHING_STYLES else 0,
+        index=list(COACHING_STYLES).index(current_style) if current_style in COACHING_STYLES else 0,
         format_func=lambda s: f"{s} — {COACHING_STYLES[s]}",
         help="Changes Penny's tone only — the budgeting advice stays the same.",
     )
@@ -385,25 +426,47 @@ def render_ask_penny() -> None:
 
     transactions = database.get_transactions(user_id)
     goal = database.get_goal(user_id)
+    ins = insights.compute_insights(transactions)
     summary = insights.build_ai_summary(profile, transactions, goal)
+    history = st.session_state["chat_history"]
 
-    history = st.session_state.setdefault("chat_history", [])
+    # Handle a purchase sent over from the wishlist.
+    pending = st.session_state.get("pending_purchase")
+    if pending:
+        _push_purchase_to_chat(
+            user_id, profile, ins, goal,
+            pending["item_name"], pending["amount"], coaching_style,
+        )
+        st.session_state["pending_purchase"] = None
+
+    # Inline purchase tester.
+    with st.expander("🛍️ Thinking about buying something? Test it"):
+        with st.form("coach_purchase", clear_on_submit=True):
+            pc1, pc2 = st.columns([2, 1])
+            with pc1:
+                p_name = st.text_input("What is it?", placeholder="e.g. New sneakers")
+            with pc2:
+                p_amount = st.number_input("Price (SGD)", min_value=0.0, step=10.0, value=80.0)
+            ask = st.form_submit_button("Ask Penny about it", type="primary", use_container_width=True)
+        if ask and p_name.strip():
+            _push_purchase_to_chat(user_id, profile, ins, goal, p_name.strip(), p_amount, coaching_style)
+            st.rerun()
 
     if not history:
         st.markdown("**Try asking:**")
         for q in SAMPLE_QUESTIONS:
-            st.write(f"- {q}")
+            st.write(f"💬 {q}")
 
     for msg in history:
-        with st.chat_message(msg["role"]):
+        with st.chat_message(msg["role"], avatar="🪙" if msg["role"] == "assistant" else None):
             st.markdown(msg["content"])
 
-    prompt = st.chat_input("Ask Penny about your budget…")
+    prompt = st.chat_input("Ask Penny anything about your money…")
     if prompt:
         history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="🪙"):
             with st.spinner("Penny is thinking…"):
                 answer = ai_coach.ask_penny(prompt, summary, coaching_style, history[:-1])
             st.markdown(answer)
@@ -414,33 +477,22 @@ PAGE_RENDERERS = {
     "Profile": render_profile,
     "Dashboard": render_dashboard,
     "Goals": render_goals,
-    "Trade-Off Simulator": render_tradeoff,
-    "Ask Penny": render_ask_penny,
+    "Coach": render_coach,
 }
 
 
 def main() -> None:
-    st.set_page_config(page_title="Penny", page_icon="🐷", layout="wide")
+    st.set_page_config(page_title="Penny", page_icon="🪙", layout="wide")
     database.init_db()
     init_session_state()
 
-    st.title("🐷 Penny")
+    st.title("🪙 Penny")
     st.caption("Your friendly budgeting & spending coach — built for Singapore.")
     st.warning(DISCLAIMER, icon="⚠️")
 
-    if not (st.session_state.get("profile") or {}).get("name"):
-        with st.expander("👋 New here? How to use Penny", expanded=False):
-            st.markdown(
-                "1. **Profile** — create a quick demo profile (loads sample data).\n"
-                "2. **Dashboard** — see where your money goes.\n"
-                "3. **Goals** — track a savings goal and your pace.\n"
-                "4. **Trade-Off Simulator** — test a purchase before you buy.\n"
-                "5. **Ask Penny** — chat for budgeting tips (works offline in mock mode)."
-            )
-
     with st.sidebar:
         st.header("Penny")
-        page = st.radio("Navigate", PAGES, label_visibility="collapsed")
+        st.radio("Navigate", PAGES, label_visibility="collapsed", key="nav")
         st.divider()
         profile = st.session_state.get("profile") or {}
         if profile.get("name"):
@@ -450,13 +502,9 @@ def main() -> None:
             st.caption("No demo profile yet — start on the Profile page.")
         st.caption(f"AI provider: {ai_coach.get_active_provider()}")
         st.divider()
-        if st.button("🔄 New demo session"):
-            st.session_state["user_id"] = None
-            st.session_state["profile"] = {}
-            st.session_state["chat_history"] = []
-            st.rerun()
+        st.button("🔄 New demo session", on_click=_reset_session)
 
-    PAGE_RENDERERS[page]()
+    PAGE_RENDERERS[st.session_state["nav"]]()
 
 
 if __name__ == "__main__":

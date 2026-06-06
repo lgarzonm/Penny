@@ -23,9 +23,10 @@ def _empty_insights() -> dict:
         "by_category": [],
         "by_month": [],
         "top_merchants": [],
+        "frequent_merchants": [],
         "largest_transactions": [],
         "recurring_subscriptions": [],
-        "text_insights": ["No transactions yet — set up a profile to load demo data."],
+        "text_insights": ["🪙 No transactions yet! Set up a profile to see your money story."],
     }
 
 
@@ -69,11 +70,18 @@ def compute_insights(transactions: list[dict]) -> dict:
     # (e.g. family contributions) which aren't discretionary "overspending".
     merchant_spend = expenses[expenses["category"] != "Transfers"]
 
-    # Top merchants by total spend.
+    # Top merchants by total spend (used for "where did I overspend").
     merchant_grp = merchant_spend.groupby("merchant")["amount"].agg(["sum", "count"]).sort_values("sum", ascending=False)
     top_merchants = [
         {"merchant": merchant, "amount": round(float(row["sum"]), 2), "count": int(row["count"])}
         for merchant, row in merchant_grp.head(5).iterrows()
+    ]
+
+    # Most-visited merchants by frequency (everyday spots: coffee, MRT, FairPrice).
+    freq_grp = merchant_grp.sort_values(["count", "sum"], ascending=False)
+    frequent_merchants = [
+        {"merchant": merchant, "amount": round(float(row["sum"]), 2), "count": int(row["count"])}
+        for merchant, row in freq_grp.head(6).iterrows()
     ]
 
     # Largest single transactions.
@@ -110,45 +118,121 @@ def compute_insights(transactions: list[dict]) -> dict:
         "by_category": by_category,
         "by_month": by_month,
         "top_merchants": top_merchants,
+        "frequent_merchants": frequent_merchants,
         "largest_transactions": largest_transactions,
         "recurring_subscriptions": recurring_subscriptions,
         "text_insights": _text_insights(
-            net_savings, savings_rate, by_category, recurring_subscriptions, largest_transactions
+            net_savings, savings_rate, by_category, recurring_subscriptions,
+            largest_transactions, frequent_merchants,
         ),
     }
 
 
-def _text_insights(net_savings, savings_rate, by_category, recurring, largest) -> list[str]:
-    """Generate short plain-English insights from the calculations."""
+_CATEGORY_EMOJI = {
+    "Food & Drinks": "🍜",
+    "Groceries": "🛒",
+    "Transport": "🚇",
+    "Shopping": "🛍️",
+    "Entertainment": "🎬",
+    "Subscriptions": "📺",
+    "Travel": "✈️",
+    "Education": "📚",
+    "Health": "💊",
+    "Transfers": "💸",
+    "Other": "📦",
+}
+
+
+def _text_insights(net_savings, savings_rate, by_category, recurring, largest, frequent) -> list[str]:
+    """Generate short, lively insights with emoji flair (no dashes)."""
     out: list[str] = []
 
     if net_savings >= 0:
-        out.append(f"You saved SGD {net_savings:,.2f} overall — a {savings_rate:.0f}% savings rate. Nice work. 🎉")
+        out.append(
+            f"🎉 You banked SGD {net_savings:,.0f} so far this year, that's a "
+            f"{savings_rate:.0f}% savings rate. Future you is grinning! 😎"
+        )
     else:
-        out.append(f"You spent SGD {abs(net_savings):,.2f} more than you earned. Let's tighten things up. 💡")
+        out.append(
+            f"😬 You're SGD {abs(net_savings):,.0f} in the red this year. No shame, "
+            "let's flip it back to green together. 💪"
+        )
 
     if by_category:
         top = by_category[0]
-        out.append(f"Your biggest spending category is {top['category']} at SGD {top['amount']:,.2f}.")
+        emoji = _CATEGORY_EMOJI.get(top["category"], "💰")
+        out.append(f"{emoji} {top['category']} is your biggest vibe at SGD {top['amount']:,.0f}.")
+
+    if frequent:
+        spot = frequent[0]
+        out.append(
+            f"📍 Your go-to spot is {spot['merchant']}, you've popped in "
+            f"{spot['count']} times. Loyalty! ☕"
+        )
 
     if recurring:
         total_subs = sum(r["amount"] for r in recurring)
         names = ", ".join(r["merchant"] for r in recurring)
-        out.append(f"Recurring subscriptions ({names}) cost about SGD {total_subs:,.2f} per month.")
+        out.append(
+            f"📺 Subscriptions ({names}) quietly nibble SGD {total_subs:,.0f} every month. "
+            "Worth a check? 👀"
+        )
 
     if largest:
         big = largest[0]
-        out.append(f"Your largest single purchase was SGD {big['amount']:,.2f} at {big['merchant']}.")
+        out.append(f"💥 Your biggest splurge was SGD {big['amount']:,.0f} at {big['merchant']}. Treat yo' self (sometimes 😅).")
 
     return out
 
 
 def avg_monthly_savings(insights_result: dict) -> float:
-    """Average net savings per month from the dashboard insights."""
+    """Average net savings per *completed* month (excludes the in-progress month
+    so a half-finished month doesn't drag the savings pace down)."""
     months = insights_result.get("by_month") or []
     if not months:
         return 0.0
-    return round(sum(m["net"] for m in months) / len(months), 2)
+    current = date.today().strftime("%Y-%m")
+    completed = [m for m in months if m["month"] != current] or months
+    return round(sum(m["net"] for m in completed) / len(completed), 2)
+
+
+def generate_goal_tips(insights_result: dict, goal_progress: dict | None) -> list[str]:
+    """Concrete, friendly suggestions to reach the goal faster (no dashes)."""
+    tips: list[str] = []
+    by_cat = {c["category"]: c["amount"] for c in insights_result.get("by_category", [])}
+    months = max(len(insights_result.get("by_month") or []), 1)
+
+    food_monthly = by_cat.get("Food & Drinks", 0) / months
+    if food_monthly > 80:
+        saving = round(food_monthly * 0.25 / 5) * 5
+        tips.append(
+            f"🍜 Cook or eat in just 2 more times a week to pocket about SGD {saving:,.0f}/month."
+        )
+
+    recurring = insights_result.get("recurring_subscriptions") or []
+    if recurring:
+        cheapest = min(recurring, key=lambda r: r["amount"])
+        tips.append(
+            f"📺 Pause {cheapest['merchant']} for a bit and free up SGD {cheapest['amount']:,.0f}/month."
+        )
+
+    shopping_monthly = by_cat.get("Shopping", 0) / months
+    if shopping_monthly > 80:
+        tips.append("🛍️ Try a 1-week no-impulse-buy challenge. Your cart can wait!")
+
+    if goal_progress:
+        if goal_progress.get("on_track"):
+            tips.append(
+                f"✅ Keep your SGD {goal_progress.get('current_pace', 0):,.0f}/month pace and you've got this!"
+            )
+        else:
+            gap = max((goal_progress.get("monthly_required", 0) or 0) - (goal_progress.get("current_pace", 0) or 0), 0)
+            if gap > 0:
+                tips.append(f"📈 Add about SGD {gap:,.0f}/month to get back on track. Small steps add up! 🚀")
+
+    if not tips:
+        tips.append("🌟 You're doing great! Keep an eye on your top category and stay consistent.")
+    return tips
 
 
 def _parse_date(value: str | None) -> date | None:

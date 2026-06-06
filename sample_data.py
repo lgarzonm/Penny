@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import calendar
 import random
-from datetime import date, timedelta
+from datetime import date
 
 import categorizer
 import database
@@ -27,13 +27,14 @@ _FOOD = [
     ("Kopitiam", 4.0, 9.0),
     ("Ya Kun Kaya Toast", 4.0, 9.0),
     ("KOI", 4.0, 7.0),
+    ("LiHO", 4.0, 7.5),
     ("Din Tai Fung", 22.0, 45.0),
     ("Genki Sushi", 18.0, 35.0),
     ("foodpanda", 15.0, 32.0),
 ]
 _TRANSPORT = [
     ("Grab", 9.0, 26.0),
-    ("SimplyGo", 1.4, 2.8),
+    ("SimplyGo (MRT)", 1.4, 2.8),
     ("Gojek", 9.0, 24.0),
 ]
 _GROCERIES = [
@@ -67,29 +68,40 @@ _BILLS = [
 ]
 
 
-def _months_back(n: int) -> list[date]:
-    """Return the first-of-month dates for the ``n`` full months before today,
-    in chronological order."""
-    first_of_this = date.today().replace(day=1)
+def _ytd_months() -> list[date]:
+    """Return the first-of-month dates from January of the current year through
+    the current month (inclusive), in chronological order."""
+    today = date.today()
     months: list[date] = []
-    cursor = first_of_this
-    for _ in range(n):
-        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    cursor = date(today.year, 1, 1)
+    last = today.replace(day=1)
+    while cursor <= last:
         months.append(cursor)
-    return list(reversed(months))
+        cursor = (
+            date(cursor.year + 1, 1, 1)
+            if cursor.month == 12
+            else date(cursor.year, cursor.month + 1, 1)
+        )
+    return months
 
 
-def _rand_day(rng: random.Random, month_start: date) -> str:
+def _rand_day(rng: random.Random, month_start: date, max_day: int | None = None) -> str:
     last_day = calendar.monthrange(month_start.year, month_start.month)[1]
-    day = rng.randint(1, last_day)
+    hi = min(max_day or last_day, last_day)
+    day = rng.randint(1, max(1, hi))
     return month_start.replace(day=day).isoformat()
 
 
-def _expense(rng: random.Random, month_start: date, pool: list[tuple[str, float, float]]) -> dict:
+def _expense(
+    rng: random.Random,
+    month_start: date,
+    pool: list[tuple[str, float, float]],
+    max_day: int | None = None,
+) -> dict:
     merchant, low, high = rng.choice(pool)
     amount = round(rng.uniform(low, high), 2)
     return {
-        "date": _rand_day(rng, month_start),
+        "date": _rand_day(rng, month_start, max_day),
         "description": merchant,
         "merchant": merchant,
         "amount": amount,
@@ -115,45 +127,60 @@ def generate_transactions(user_id: int, monthly_income: float) -> list[dict]:
         (_ENTERTAINMENT, 5),
     ]
 
-    for month_start in _months_back(3):
-        # Monthly income (salary / allowance) near the start of the month.
-        rows.append({
-            "date": month_start.replace(day=1).isoformat(),
-            "description": "Monthly income",
-            "merchant": "Salary / Allowance",
-            "amount": round(income, 2),
-            "type": "income",
-            "category": "Income",
-        })
-
+    today = date.today()
+    for month_start in _ytd_months():
         last_day = calendar.monthrange(month_start.year, month_start.month)[1]
+        is_current = month_start.year == today.year and month_start.month == today.month
+        max_day = today.day if is_current else last_day
 
-        # Fixed monthly bills (rent, telco, family contribution).
-        for merchant, amount, day, category in _BILLS:
+        # Month-to-month fluctuation so the trend chart isn't flat. The current
+        # (in-progress) month is scaled down by how little of it has elapsed.
+        multiplier = rng.uniform(0.82, 1.28)
+        if is_current:
+            multiplier *= max_day / last_day
+
+        # Monthly income (salary / allowance) on payday near month-end. In the
+        # in-progress month it only appears once payday has actually passed.
+        payday = min(25, last_day)
+        if payday <= max_day:
             rows.append({
-                "date": month_start.replace(day=min(day, last_day)).isoformat(),
-                "description": merchant,
-                "merchant": merchant,
-                "amount": amount,
-                "type": "expense",
-                "category": category,
+                "date": month_start.replace(day=payday).isoformat(),
+                "description": "Monthly income",
+                "merchant": "Salary / Allowance",
+                "amount": round(income, 2),
+                "type": "income",
+                "category": "Income",
             })
+
+        # Fixed monthly bills (telco, family contribution).
+        for merchant, amount, day, category in _BILLS:
+            if min(day, last_day) <= max_day:
+                rows.append({
+                    "date": month_start.replace(day=min(day, last_day)).isoformat(),
+                    "description": merchant,
+                    "merchant": merchant,
+                    "amount": amount,
+                    "type": "expense",
+                    "category": category,
+                })
 
         # Fixed recurring subscriptions (so the dashboard can detect them).
         for merchant, amount, day in _SUBSCRIPTIONS:
-            rows.append({
-                "date": month_start.replace(day=min(day, last_day)).isoformat(),
-                "description": f"{merchant} subscription",
-                "merchant": merchant,
-                "amount": amount,
-                "type": "expense",
-                "category": categorizer.categorize(merchant=merchant, txn_type="expense"),
-            })
+            if min(day, last_day) <= max_day:
+                rows.append({
+                    "date": month_start.replace(day=min(day, last_day)).isoformat(),
+                    "description": f"{merchant} subscription",
+                    "merchant": merchant,
+                    "amount": amount,
+                    "type": "expense",
+                    "category": categorizer.categorize(merchant=merchant, txn_type="expense"),
+                })
 
-        # Variable everyday spending.
+        # Variable everyday spending, scaled by the month's multiplier.
         for pool, count in plan:
-            for _ in range(count):
-                rows.append(_expense(rng, month_start, pool))
+            scaled = round(count * multiplier)
+            for _ in range(scaled):
+                rows.append(_expense(rng, month_start, pool, max_day))
 
     for row in rows:
         row["user_id"] = user_id
