@@ -1,0 +1,8 @@
+streamlit>=1.33
+pandas>=2.0
+plotly>=5.20
+python-dotenv>=1.0
+
+# Optional AI providers — the app runs in mock mode without these.
+# anthropic>=0.40
+# openai>=1.30
