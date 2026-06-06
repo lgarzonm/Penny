@@ -14,9 +14,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 import database
+import insights
 import sample_data
 
 DISCLAIMER = (
@@ -130,8 +133,85 @@ def render_profile() -> None:
         )
 
 
+def _require_user() -> int | None:
+    user_id = st.session_state.get("user_id")
+    if not user_id:
+        st.info("👈 Create a demo profile first (Profile page) to load your data.")
+        return None
+    return user_id
+
+
 def render_dashboard() -> None:
-    _placeholder("Spending Dashboard", "Phase 5")
+    st.subheader("Spending Dashboard")
+    user_id = _require_user()
+    if not user_id:
+        return
+
+    transactions = database.get_transactions(user_id)
+    ins = insights.compute_insights(transactions)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total income", f"SGD {ins['total_income']:,.2f}")
+    c2.metric("Total expenses", f"SGD {ins['total_expenses']:,.2f}")
+    c3.metric("Net savings", f"SGD {ins['net_savings']:,.2f}")
+    c4.metric("Savings rate", f"{ins['savings_rate']:.0f}%")
+
+    st.divider()
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Spending by category**")
+        if ins["by_category"]:
+            cat_df = pd.DataFrame(ins["by_category"])
+            fig = px.pie(cat_df, names="category", values="amount", hole=0.45)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No expense data.")
+
+    with right:
+        st.markdown("**Income vs. expenses by month**")
+        if ins["by_month"]:
+            month_df = pd.DataFrame(ins["by_month"])
+            melted = month_df.melt(
+                id_vars="month", value_vars=["income", "expenses"],
+                var_name="type", value_name="amount",
+            )
+            fig = px.bar(melted, x="month", y="amount", color="type", barmode="group")
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=320)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No monthly data.")
+
+    st.markdown("**Top merchants**")
+    if ins["top_merchants"]:
+        merch_df = pd.DataFrame(ins["top_merchants"]).sort_values("amount")
+        fig = px.bar(merch_df, x="amount", y="merchant", orientation="h")
+        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280)
+        st.plotly_chart(fig, use_container_width=True)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**Largest transactions**")
+        if ins["largest_transactions"]:
+            st.dataframe(
+                pd.DataFrame(ins["largest_transactions"]),
+                hide_index=True, use_container_width=True,
+            )
+    with col_b:
+        st.markdown("**Recurring subscriptions**")
+        if ins["recurring_subscriptions"]:
+            st.dataframe(
+                pd.DataFrame(ins["recurring_subscriptions"]),
+                hide_index=True, use_container_width=True,
+            )
+        else:
+            st.caption("No recurring subscriptions detected.")
+
+    st.divider()
+    st.markdown("**💡 Insights**")
+    for line in ins["text_insights"]:
+        st.write(f"- {line}")
 
 
 def render_goals() -> None:
