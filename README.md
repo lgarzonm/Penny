@@ -1,4 +1,4 @@
-# 🐷 Penny
+# 🪙 Penny
 
 Penny is an AI-powered **budgeting and behavioral coaching** companion for young
 adults in Singapore, built with [Streamlit](https://streamlit.io/). It helps

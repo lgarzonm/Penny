@@ -394,7 +394,7 @@ def _push_purchase_to_chat(user_id, profile, ins, goal, purchase_name, amount, c
 
 
 def render_coach() -> None:
-    st.subheader("Penny — your money coach 🐷")
+    st.subheader("Penny — your money coach 🪙")
     user_id = _require_user()
     if not user_id:
         return
@@ -458,7 +458,7 @@ def render_coach() -> None:
             st.write(f"💬 {q}")
 
     for msg in history:
-        with st.chat_message(msg["role"], avatar="🐷" if msg["role"] == "assistant" else None):
+        with st.chat_message(msg["role"], avatar="🪙" if msg["role"] == "assistant" else None):
             st.markdown(msg["content"])
 
     prompt = st.chat_input("Ask Penny anything about your money…")
@@ -466,7 +466,7 @@ def render_coach() -> None:
         history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-        with st.chat_message("assistant", avatar="🐷"):
+        with st.chat_message("assistant", avatar="🪙"):
             with st.spinner("Penny is thinking…"):
                 answer = ai_coach.ask_penny(prompt, summary, coaching_style, history[:-1])
             st.markdown(answer)
@@ -482,11 +482,11 @@ PAGE_RENDERERS = {
 
 
 def main() -> None:
-    st.set_page_config(page_title="Penny", page_icon="🐷", layout="wide")
+    st.set_page_config(page_title="Penny", page_icon="🪙", layout="wide")
     database.init_db()
     init_session_state()
 
-    st.title("🐷 Penny")
+    st.title("🪙 Penny")
     st.caption("Your friendly budgeting & spending coach — built for Singapore.")
     st.warning(DISCLAIMER, icon="⚠️")
 

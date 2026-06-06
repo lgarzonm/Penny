@@ -26,7 +26,7 @@ def _empty_insights() -> dict:
         "frequent_merchants": [],
         "largest_transactions": [],
         "recurring_subscriptions": [],
-        "text_insights": ["🐷 No transactions yet! Set up a profile to see your money story."],
+        "text_insights": ["🪙 No transactions yet! Set up a profile to see your money story."],
     }
 
 
