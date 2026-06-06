@@ -215,7 +215,79 @@ def render_dashboard() -> None:
 
 
 def render_goals() -> None:
-    _placeholder("Savings Goal", "Phase 6")
+    st.subheader("Savings Goal")
+    user_id = _require_user()
+    if not user_id:
+        return
+
+    goal = database.get_goal(user_id) or {}
+
+    with st.form("goal_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            goal_name = st.text_input("Goal name", value=goal.get("goal_name", "My goal"))
+            target_amount = st.number_input(
+                "Target amount (SGD)", min_value=0.0, step=100.0,
+                value=float(goal.get("target_amount", 2000.0) or 0.0),
+            )
+        with col2:
+            current_amount = st.number_input(
+                "Current saved amount (SGD)", min_value=0.0, step=50.0,
+                value=float(goal.get("current_amount", 0.0) or 0.0),
+            )
+            deadline_default = date.fromisoformat(goal["deadline"]) if goal.get("deadline") else date.today()
+            deadline = st.date_input("Deadline", value=deadline_default)
+        saved = st.form_submit_button("Save goal")
+
+    if saved:
+        database.upsert_goal(
+            user_id,
+            goal_name=goal_name.strip() or "My goal",
+            target_amount=target_amount,
+            current_amount=current_amount,
+            deadline=deadline.isoformat(),
+        )
+        prof = st.session_state.get("profile") or {}
+        prof.update({
+            "goal_name": goal_name.strip(),
+            "target_amount": target_amount,
+            "current_amount": current_amount,
+        })
+        st.session_state["profile"] = prof
+        st.success("Goal saved.")
+        goal = database.get_goal(user_id) or {}
+
+    if not goal:
+        st.info("Set a goal above to see your progress.")
+        return
+
+    ins = insights.compute_insights(database.get_transactions(user_id))
+    prog = insights.compute_goal_progress(goal, ins)
+
+    st.divider()
+    st.markdown(f"### {goal.get('goal_name', 'My goal')}")
+    st.progress(
+        min(prog["progress_pct"] / 100, 1.0),
+        text=f"{prog['progress_pct']:.0f}% — SGD {prog['current_amount']:,.2f} of SGD {prog['target_amount']:,.2f}",
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Remaining", f"SGD {prog['remaining']:,.2f}")
+    c2.metric("Monthly needed", f"SGD {prog['monthly_required']:,.2f}")
+    c3.metric("Your pace / mo", f"SGD {prog['current_pace']:,.2f}")
+
+    if prog["on_track"] is True:
+        st.success("✅ You're on track to reach this goal at your current pace.")
+    elif prog["on_track"] is False:
+        st.warning("⚠️ At your current pace you may miss this goal — see the trade-off simulator for options.")
+
+    if prog["months_left"] is not None:
+        st.caption(f"About {prog['months_left']:.1f} months until your deadline.")
+    if prog["projected_date"]:
+        st.caption(
+            f"At your current pace you'd reach the goal in ~{prog['projected_months']:.1f} "
+            f"months (around {prog['projected_date']})."
+        )
 
 
 def render_tradeoff() -> None:

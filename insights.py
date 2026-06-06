@@ -7,7 +7,11 @@ full transaction list).
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
+
 import pandas as pd
+
+_DAYS_PER_MONTH = 30.44
 
 
 def _empty_insights() -> dict:
@@ -133,6 +137,86 @@ def _text_insights(net_savings, savings_rate, by_category, recurring, largest) -
         out.append(f"Your largest single purchase was SGD {big['amount']:,.2f} at {big['merchant']}.")
 
     return out
+
+
+def avg_monthly_savings(insights_result: dict) -> float:
+    """Average net savings per month from the dashboard insights."""
+    months = insights_result.get("by_month") or []
+    if not months:
+        return 0.0
+    return round(sum(m["net"] for m in months) / len(months), 2)
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
+
+
+def compute_goal_progress(
+    goal: dict | None,
+    insights_result: dict,
+    today: date | None = None,
+) -> dict | None:
+    """Compute savings-goal progress, monthly requirement, and on-track status.
+
+    Returns ``None`` if there is no goal. ``insights_result`` is the dict from
+    :func:`compute_insights` (used to estimate the current savings pace).
+    """
+    if not goal:
+        return None
+
+    today = today or date.today()
+    target = float(goal.get("target_amount", 0) or 0)
+    current = float(goal.get("current_amount", 0) or 0)
+    remaining = max(target - current, 0.0)
+    progress_pct = (current / target * 100) if target > 0 else 100.0
+    progress_pct = max(0.0, min(progress_pct, 100.0))
+
+    deadline = _parse_date(goal.get("deadline"))
+    days_left = (deadline - today).days if deadline else None
+    months_left = (days_left / _DAYS_PER_MONTH) if days_left is not None else None
+
+    if months_left and months_left > 0:
+        monthly_required = round(remaining / months_left, 2)
+    else:
+        # No deadline, or deadline passed: the whole gap is needed now.
+        monthly_required = round(remaining, 2)
+
+    pace = avg_monthly_savings(insights_result)
+
+    on_track = None
+    projected_months = None
+    projected_date = None
+    if remaining <= 0:
+        on_track = True
+    elif pace > 0:
+        projected_months = round(remaining / pace, 1)
+        projected_date = today + timedelta(days=projected_months * _DAYS_PER_MONTH)
+        if months_left is not None:
+            on_track = pace >= monthly_required
+        else:
+            on_track = True  # no deadline to miss
+    else:
+        on_track = False  # not saving, gap remains
+
+    return {
+        "target_amount": round(target, 2),
+        "current_amount": round(current, 2),
+        "remaining": round(remaining, 2),
+        "progress_pct": round(progress_pct, 1),
+        "deadline": goal.get("deadline"),
+        "days_left": days_left,
+        "months_left": round(months_left, 1) if months_left is not None else None,
+        "monthly_required": monthly_required,
+        "current_pace": pace,
+        "on_track": on_track,
+        "projected_months": projected_months,
+        "projected_date": projected_date.isoformat() if projected_date else None,
+    }
 
 
 def build_ai_summary(profile: dict, transactions: list[dict], goal: dict | None) -> dict:
