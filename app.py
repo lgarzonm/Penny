@@ -12,9 +12,12 @@ Run with:  streamlit run app.py
 
 from __future__ import annotations
 
+from datetime import date
+
 import streamlit as st
 
 import database
+import sample_data
 
 DISCLAIMER = (
     "I'm not a licensed financial advisor. I can help with budgeting, spending "
@@ -43,12 +46,88 @@ def _placeholder(page: str, phase: str) -> None:
     st.info(f"🚧 Coming in a later build phase ({phase}).")
 
 
+AGE_GROUPS = ["Under 18", "18-24", "25-34", "35-44", "45+"]
+
+
 def render_profile() -> None:
-    _placeholder("Demo Profile", "Phase 1 polish / wiring")
-    st.caption(
-        "Will collect: name, age group, monthly income (SGD), savings goal, "
-        "target amount, target date, and preferred coaching style."
-    )
+    st.subheader("Demo Profile")
+    st.caption("No real login required — this just sets up your demo session.")
+
+    existing = st.session_state.get("profile") or {}
+
+    with st.form("profile_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Name", value=existing.get("name", ""))
+            age_group = st.selectbox(
+                "Age group",
+                AGE_GROUPS,
+                index=AGE_GROUPS.index(existing.get("age_group", "18-24"))
+                if existing.get("age_group") in AGE_GROUPS
+                else 1,
+            )
+            monthly_income = st.number_input(
+                "Monthly income / allowance (SGD)",
+                min_value=0.0,
+                step=100.0,
+                value=float(existing.get("monthly_income", 2500.0)),
+            )
+            coaching_style = st.selectbox(
+                "Preferred coaching style",
+                list(COACHING_STYLES),
+                index=list(COACHING_STYLES).index(existing.get("coaching_style", "Penny")),
+                format_func=lambda s: f"{s} — {COACHING_STYLES[s]}",
+            )
+        with col2:
+            goal_name = st.text_input(
+                "Main savings goal", value=existing.get("goal_name", "Japan trip")
+            )
+            target_amount = st.number_input(
+                "Target amount (SGD)", min_value=0.0, step=100.0,
+                value=float(existing.get("target_amount", 2000.0)),
+            )
+            current_amount = st.number_input(
+                "Current saved amount (SGD)", min_value=0.0, step=50.0,
+                value=float(existing.get("current_amount", 0.0)),
+            )
+            target_date = st.date_input("Target date", value=date.today())
+
+        submitted = st.form_submit_button("Save profile & load demo data")
+
+    if submitted:
+        if not name.strip():
+            st.error("Please enter a name.")
+            return
+
+        user_id = database.create_user(
+            name=name.strip(),
+            age_group=age_group,
+            monthly_income=monthly_income,
+            coaching_style=coaching_style,
+        )
+        database.upsert_goal(
+            user_id,
+            goal_name=goal_name.strip() or "My goal",
+            target_amount=target_amount,
+            current_amount=current_amount,
+            deadline=target_date.isoformat(),
+        )
+        added = sample_data.load_sample_data(user_id, monthly_income)
+
+        st.session_state["user_id"] = user_id
+        st.session_state["profile"] = {
+            "name": name.strip(),
+            "age_group": age_group,
+            "monthly_income": monthly_income,
+            "coaching_style": coaching_style,
+            "goal_name": goal_name.strip(),
+            "target_amount": target_amount,
+            "current_amount": current_amount,
+        }
+        st.success(
+            f"Profile saved for {name.strip()}. Loaded {added} sample transactions. "
+            "Head to the Dashboard next."
+        )
 
 
 def render_dashboard() -> None:

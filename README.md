@@ -66,8 +66,8 @@ This repo is being built phase-by-phase per `docs/implementation_plan.md`.
 - [x] Phase 0 — Project setup & file structure
 - [x] Phase 1 — Streamlit UI skeleton
 - [x] Phase 2 — SQLite database
-- [ ] Phase 3 — Sample Singapore transaction data
-- [ ] Phase 4 — Categorization
+- [x] Phase 3 — Sample Singapore transaction data
+- [x] Phase 4 — Categorization
 - [ ] Phase 5 — Dashboard & insights
 - [ ] Phase 6 — Savings goal tracker
 - [ ] Phase 7 — Trade-off simulator
