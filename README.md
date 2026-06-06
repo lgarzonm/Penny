@@ -59,6 +59,30 @@ Penny supports Anthropic, OpenAI, or a key-free **mock mode**. Configure via
 `.env` (see `.env.example`). Mock mode generates rule-based responses so the
 demo works without paid API access.
 
+## Demo script (class presentation)
+
+A ~3-minute walkthrough:
+
+1. **Intro (15s)** — "Penny is a budgeting coach for young adults in Singapore.
+   It's coaching only — not investment or regulated advice."
+2. **Profile (30s)** — Create a profile (e.g. *Alex, 18–24, SGD 2,800/mo*,
+   goal *Japan trip — SGD 2,000 by December*, style *Penny*). Sample data loads
+   automatically.
+3. **Dashboard (45s)** — Show totals and the ~19% savings rate. Point out the
+   category donut (Food & Drinks leads), monthly trend, top merchants, recurring
+   subscriptions (Netflix/Spotify/Disney+), and the plain-English insights.
+4. **Goals (30s)** — Show progress toward the Japan trip, monthly amount needed
+   vs. current pace, and the on-track badge.
+5. **Trade-Off Simulator (30s)** — Try an SGD 80 purchase; show the estimated
+   goal delay and the suggested offset ("trim Food & Drinks by SGD 20/week").
+6. **Ask Penny (45s)** — Ask "Where did I overspend?" and "How can I reach my
+   goal faster?". Switch coaching style (e.g. to *Mark*) to show the tone change.
+   Ask "Should I invest in Bitcoin?" to demonstrate the safety guardrail.
+7. **Wrap (15s)** — Note it runs offline in mock mode, sends only summaries to
+   the AI, and that PDF bank-statement upload is a planned enhancement.
+
+Tip: use the **🔄 New demo session** button in the sidebar to reset between runs.
+
 ## Build status
 
 This repo is being built phase-by-phase per `docs/implementation_plan.md`.
@@ -69,11 +93,11 @@ This repo is being built phase-by-phase per `docs/implementation_plan.md`.
 - [x] Phase 3 — Sample Singapore transaction data
 - [x] Phase 4 — Categorization
 - [x] Phase 5 — Dashboard & insights
-- [ ] Phase 6 — Savings goal tracker
-- [ ] Phase 7 — Trade-off simulator
-- [ ] Phase 8 — Ask Penny chat
-- [ ] Phase 9 — Coaching styles
-- [ ] Phase 10 — Polish & demo script
+- [x] Phase 6 — Savings goal tracker
+- [x] Phase 7 — Trade-off simulator
+- [x] Phase 8 — Ask Penny chat
+- [x] Phase 9 — Coaching styles
+- [x] Phase 10 — Polish & demo script
 
 ## Limitations
 

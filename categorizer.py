@@ -32,7 +32,7 @@ _RULES: list[tuple[str, tuple[str, ...]]] = [
     ("Transport", ("grab", "gojek", "simplygo", "mrt", "comfortdelgro", "tada", "bus", "ez-link")),
     ("Subscriptions", ("netflix", "spotify", "disney", "hbo", "youtube premium", "apple", "icloud", "amazon prime")),
     ("Shopping", ("shopee", "lazada", "uniqlo", "zara", "h&m", "qoo10", "decathlon", "ikea")),
-    ("Food & Drinks", ("starbucks", "toast box", "mcdonald", "kopitiam", "kfc", "subway", "ya kun", "koi", "liho", "foodpanda", "deliveroo")),
+    ("Food & Drinks", ("starbucks", "toast box", "mcdonald", "kopitiam", "kfc", "subway", "ya kun", "koi", "liho", "foodpanda", "deliveroo", "din tai fung", "genki", "sushi", "ramen", "hawker", "kaya toast")),
     ("Entertainment", ("golden village", "cathay", "gv ", "shaw", "steam", "cinema", "klook")),
     ("Travel", ("airlines", "scoot", "airbnb", "hotel", "expedia", "agoda", "singapore air", "changi")),
     ("Education", ("course", "udemy", "coursera", "school", "tuition", "kinokuniya", "popular bookstore")),
