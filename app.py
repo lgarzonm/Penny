@@ -21,6 +21,8 @@ import streamlit as st
 import database
 import insights
 import sample_data
+import tradeoff
+from categorizer import CATEGORIES
 
 DISCLAIMER = (
     "I'm not a licensed financial advisor. I can help with budgeting, spending "
@@ -291,7 +293,53 @@ def render_goals() -> None:
 
 
 def render_tradeoff() -> None:
-    _placeholder("Trade-Off Simulator", "Phase 7")
+    st.subheader("Trade-Off Simulator")
+    st.caption("See how a purchase affects your goal — and how you could offset it.")
+    user_id = _require_user()
+    if not user_id:
+        return
+
+    with st.form("tradeoff_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            purchase_name = st.text_input("Desired purchase", value="New sneakers")
+        with col2:
+            purchase_amount = st.number_input(
+                "Purchase amount (SGD)", min_value=0.0, step=10.0, value=80.0
+            )
+        with col3:
+            spend_categories = [c for c in CATEGORIES if c not in ("Income", "Transfers")]
+            st.selectbox("Category", spend_categories, index=spend_categories.index("Shopping"))
+        simulate = st.form_submit_button("Simulate")
+
+    if not simulate:
+        return
+
+    ins = insights.compute_insights(database.get_transactions(user_id))
+    goal = database.get_goal(user_id)
+    prog = insights.compute_goal_progress(goal, ins) if goal else None
+    result = tradeoff.simulate(
+        purchase_amount,
+        ins,
+        goal_progress=prog,
+        goal_name=(goal or {}).get("goal_name", "your goal"),
+        purchase_name=purchase_name.strip() or "this purchase",
+    )
+
+    st.divider()
+    c1, c2 = st.columns(2)
+    c1.metric("Purchase", f"SGD {result['purchase_amount']:,.2f}")
+    if result["delay_weeks"] is not None:
+        c2.metric("Estimated goal delay", f"~{result['delay_weeks']:.1f} weeks")
+    else:
+        c2.metric("Estimated goal delay", "N/A")
+
+    st.info(result["message"])
+
+    if result["offsets"]:
+        st.markdown("**Possible offsets**")
+        for o in result["offsets"]:
+            st.write(f"- {o['note']} (≈ SGD {o['weekly_amount'] * o['weeks']:,.2f} total)")
 
 
 def render_ask_penny() -> None:

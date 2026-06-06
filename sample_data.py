@@ -24,36 +24,46 @@ _FOOD = [
     ("Toast Box", 3.0, 8.0),
     ("Starbucks", 6.0, 9.5),
     ("McDonald's", 8.0, 14.0),
-    ("Kopitiam", 3.5, 8.0),
+    ("Kopitiam", 4.0, 9.0),
     ("Ya Kun Kaya Toast", 4.0, 9.0),
     ("KOI", 4.0, 7.0),
+    ("Din Tai Fung", 22.0, 45.0),
+    ("Genki Sushi", 18.0, 35.0),
+    ("foodpanda", 15.0, 32.0),
 ]
 _TRANSPORT = [
-    ("Grab", 8.0, 25.0),
-    ("SimplyGo", 1.2, 2.8),
-    ("Gojek", 8.0, 22.0),
+    ("Grab", 9.0, 26.0),
+    ("SimplyGo", 1.4, 2.8),
+    ("Gojek", 9.0, 24.0),
 ]
 _GROCERIES = [
-    ("FairPrice", 15.0, 85.0),
-    ("Cold Storage", 20.0, 90.0),
-    ("Giant", 15.0, 70.0),
+    ("FairPrice", 25.0, 90.0),
+    ("Cold Storage", 30.0, 95.0),
+    ("Giant", 20.0, 75.0),
 ]
 _SHOPPING = [
-    ("Shopee", 10.0, 120.0),
-    ("Lazada", 12.0, 110.0),
-    ("Uniqlo", 30.0, 150.0),
+    ("Shopee", 20.0, 130.0),
+    ("Lazada", 25.0, 120.0),
+    ("Uniqlo", 35.0, 150.0),
 ]
 _TRANSFERS = [
-    ("PayNow Transfer", 10.0, 60.0),
-    ("DBS PayLah", 5.0, 40.0),
+    ("PayNow Transfer", 20.0, 80.0),
+    ("DBS PayLah", 10.0, 45.0),
 ]
 _ENTERTAINMENT = [
-    ("Golden Village", 12.0, 16.0),
+    ("Golden Village", 13.0, 17.0),
+    ("Klook", 25.0, 70.0),
 ]
 # Fixed monthly subscriptions (merchant, amount, day-of-month).
 _SUBSCRIPTIONS = [
     ("Netflix", 17.98, 5),
     ("Spotify", 10.98, 12),
+    ("Disney+", 11.98, 18),
+]
+# Fixed monthly bills (merchant, amount, day-of-month, category).
+_BILLS = [
+    ("Singtel", 42.90, 8, "Other"),
+    ("Family Contribution (PayNow)", 300.0, 2, "Transfers"),
 ]
 
 
@@ -94,14 +104,15 @@ def generate_transactions(user_id: int, monthly_income: float) -> list[dict]:
     income = monthly_income if monthly_income and monthly_income > 0 else DEFAULT_MONTHLY_INCOME
     rows: list[dict] = []
 
-    # Per-month volume of each expense type (totals ~40 expenses/month).
+    # Per-month volume of each expense type (realistic ~15-20% savings rate,
+    # with Food & Drinks as the leading category — typical for Singapore).
     plan = [
-        (_FOOD, 14),
-        (_TRANSPORT, 12),
-        (_GROCERIES, 4),
-        (_SHOPPING, 3),
-        (_TRANSFERS, 3),
-        (_ENTERTAINMENT, 2),
+        (_FOOD, 34),
+        (_TRANSPORT, 24),
+        (_GROCERIES, 6),
+        (_SHOPPING, 7),
+        (_TRANSFERS, 2),
+        (_ENTERTAINMENT, 5),
     ]
 
     for month_start in _months_back(3):
@@ -115,8 +126,20 @@ def generate_transactions(user_id: int, monthly_income: float) -> list[dict]:
             "category": "Income",
         })
 
-        # Fixed recurring subscriptions (so the dashboard can detect them).
         last_day = calendar.monthrange(month_start.year, month_start.month)[1]
+
+        # Fixed monthly bills (rent, telco, family contribution).
+        for merchant, amount, day, category in _BILLS:
+            rows.append({
+                "date": month_start.replace(day=min(day, last_day)).isoformat(),
+                "description": merchant,
+                "merchant": merchant,
+                "amount": amount,
+                "type": "expense",
+                "category": category,
+            })
+
+        # Fixed recurring subscriptions (so the dashboard can detect them).
         for merchant, amount, day in _SUBSCRIPTIONS:
             rows.append({
                 "date": month_start.replace(day=min(day, last_day)).isoformat(),
