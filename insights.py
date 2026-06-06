@@ -65,8 +65,12 @@ def compute_insights(transactions: list[dict]) -> dict:
             "net": round(m_inc - m_exp, 2),
         })
 
+    # Merchant-level views use actual spend, excluding money transfers
+    # (e.g. family contributions) which aren't discretionary "overspending".
+    merchant_spend = expenses[expenses["category"] != "Transfers"]
+
     # Top merchants by total spend.
-    merchant_grp = expenses.groupby("merchant")["amount"].agg(["sum", "count"]).sort_values("sum", ascending=False)
+    merchant_grp = merchant_spend.groupby("merchant")["amount"].agg(["sum", "count"]).sort_values("sum", ascending=False)
     top_merchants = [
         {"merchant": merchant, "amount": round(float(row["sum"]), 2), "count": int(row["count"])}
         for merchant, row in merchant_grp.head(5).iterrows()
@@ -80,7 +84,7 @@ def compute_insights(transactions: list[dict]) -> dict:
             "amount": round(float(r["amount"]), 2),
             "category": r["category"],
         }
-        for _, r in expenses.sort_values("amount", ascending=False).head(5).iterrows()
+        for _, r in merchant_spend.sort_values("amount", ascending=False).head(5).iterrows()
     ]
 
     # Recurring subscriptions: Subscriptions-category merchants seen in 2+ months.

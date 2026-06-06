@@ -47,11 +47,6 @@ def init_session_state() -> None:
     st.session_state.setdefault("chat_history", [])
 
 
-def _placeholder(page: str, phase: str) -> None:
-    st.subheader(page)
-    st.info(f"🚧 Coming in a later build phase ({phase}).")
-
-
 AGE_GROUPS = ["Under 18", "18-24", "25-34", "35-44", "45+"]
 
 
@@ -424,6 +419,16 @@ def main() -> None:
     st.caption("Your friendly budgeting & spending coach — built for Singapore.")
     st.warning(DISCLAIMER, icon="⚠️")
 
+    if not (st.session_state.get("profile") or {}).get("name"):
+        with st.expander("👋 New here? How to use Penny", expanded=False):
+            st.markdown(
+                "1. **Profile** — create a quick demo profile (loads sample data).\n"
+                "2. **Dashboard** — see where your money goes.\n"
+                "3. **Goals** — track a savings goal and your pace.\n"
+                "4. **Trade-Off Simulator** — test a purchase before you buy.\n"
+                "5. **Ask Penny** — chat for budgeting tips (works offline in mock mode)."
+            )
+
     with st.sidebar:
         st.header("Penny")
         page = st.radio("Navigate", PAGES, label_visibility="collapsed")
@@ -431,8 +436,16 @@ def main() -> None:
         profile = st.session_state.get("profile") or {}
         if profile.get("name"):
             st.success(f"Demo user: {profile['name']}")
+            st.caption(f"Coaching style: {profile.get('coaching_style', 'Penny')}")
         else:
             st.caption("No demo profile yet — start on the Profile page.")
+        st.caption(f"AI provider: {ai_coach.get_active_provider()}")
+        st.divider()
+        if st.button("🔄 New demo session"):
+            st.session_state["user_id"] = None
+            st.session_state["profile"] = {}
+            st.session_state["chat_history"] = []
+            st.rerun()
 
     PAGE_RENDERERS[page]()
 
