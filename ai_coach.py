@@ -27,6 +27,15 @@ COACHING_TONES = {
     "Fred": "wise and reflective, calm and thoughtful",
 }
 
+# Voice presets used by the mock provider so each coach reads distinctly.
+# Only the wrapper wording changes — the underlying facts/numbers are identical.
+STYLE_VOICE = {
+    "Penny": {"prefix": "", "closer": " You've got this! 💪"},
+    "Mark": {"prefix": "Straight talk: ", "closer": " Pick one thing and cut it this week."},
+    "Van": {"prefix": "Let's weigh it up: ", "closer": " A small compromise keeps things balanced."},
+    "Fred": {"prefix": "Something to reflect on: ", "closer": " Small, steady choices compound over time."},
+}
+
 # Topics Penny must not advise on — redirected locally (no API call).
 RESTRICTED_TOPICS = (
     "invest", "stock", "shares", "etf", "crypto", "bitcoin", "ethereum",
@@ -83,8 +92,9 @@ def _is_restricted(question: str) -> bool:
 
 
 def _restricted_response(coaching_style: str) -> str:
+    prefix = STYLE_VOICE.get(coaching_style, STYLE_VOICE["Penny"])["prefix"]
     return (
-        "That's a bit outside what I can help with — I stick to budgeting, "
+        f"{prefix}That's a bit outside what I can help with — I stick to budgeting, "
         "spending habits, and savings, not investments, credit, crypto, or "
         f"insurance.\n\n{DISCLAIMER}"
     )
@@ -219,13 +229,5 @@ def _mock_response(question: str, summary: dict, coaching_style: str) -> str:
             "where you overspend, or how to reach your goal."
         )
 
-    return f"{_tone_prefix(coaching_style)}{body}\n\n{DISCLAIMER}"
-
-
-def _tone_prefix(coaching_style: str) -> str:
-    return {
-        "Penny": "",
-        "Mark": "Straight talk: ",
-        "Van": "Let's weigh it up: ",
-        "Fred": "Something to reflect on: ",
-    }.get(coaching_style, "")
+    voice = STYLE_VOICE.get(coaching_style, STYLE_VOICE["Penny"])
+    return f"{voice['prefix']}{body}{voice['closer']}\n\n{DISCLAIMER}"

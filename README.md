@@ -72,7 +72,7 @@ This repo is being built phase-by-phase per `docs/implementation_plan.md`.
 - [x] Phase 6 — Savings goal tracker
 - [x] Phase 7 — Trade-off simulator
 - [x] Phase 8 — Ask Penny chat
-- [ ] Phase 9 — Coaching styles
+- [x] Phase 9 — Coaching styles
 - [ ] Phase 10 — Polish & demo script
 
 ## Limitations

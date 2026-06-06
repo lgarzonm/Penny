@@ -365,7 +365,20 @@ def render_ask_penny() -> None:
     )
 
     profile = st.session_state.get("profile") or {}
-    coaching_style = profile.get("coaching_style", "Penny")
+    current_style = profile.get("coaching_style", "Penny")
+    coaching_style = st.selectbox(
+        "Coaching style",
+        list(COACHING_STYLES),
+        index=list(COACHING_STYLES).index(current_style)
+        if current_style in COACHING_STYLES else 0,
+        format_func=lambda s: f"{s} — {COACHING_STYLES[s]}",
+        help="Changes Penny's tone only — the budgeting advice stays the same.",
+    )
+    if coaching_style != current_style:
+        profile["coaching_style"] = coaching_style
+        st.session_state["profile"] = profile
+        database.update_user(user_id, coaching_style=coaching_style)
+
     transactions = database.get_transactions(user_id)
     goal = database.get_goal(user_id)
     summary = insights.build_ai_summary(profile, transactions, goal)
